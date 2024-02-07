@@ -1,5 +1,6 @@
 import cadquery as cq
 import sys
+import copy
 
 class BeamArgs:
     def __init__(self):
@@ -7,47 +8,147 @@ class BeamArgs:
         self.half_unit = self.unit / 2.0
         self.corner_rounding_outer = 0.5
         self.bolt_shaft_diameter = 5.01 # The hardware tends to have 4.9xmm diameter so don't need much slop added.
+        self.bolt_contersink_diameter = self.bolt_shaft_diameter + 0.5
+        self.bolt_contersink_angle = 45 # Conutersink chamfers the lip of all holes slightly, It isn't to mate with sloped hardware
+        self.bolt_bore_diameter = self.unit * 0.8
+        self.bolt_bore_depth = 1.0
+        
 default_beam_args = BeamArgs()
 
 # a small number, e.g. to add or subtract from x.
 def relative_epsilon(x):
     return x / 65536
 
-# Build a solid beam, great for calibrating shrinkage and warparge from grid beam structures:
-def build_beam(args, length = 2, width = 1, height = 1): # BeamArgs
-    result = cq.Workplane("XY" ).box(args.unit * width, args.unit * length, args.unit * height)
+def round_beam(args, beam):
+    """Round the external edges of an already-built beam.
+    
+    Args:
+        args (BeamArgs): The common parameters to a whole class of generated beams
+        like external dimensions and bore diameters which make generated models compatible.
+        beam (Workplane) The beam.
+    Returns:
+        Workplane representing the constructed beam.
+    """
+
     # Round the four vertical edges:
-    result = result.edges("|Z").fillet(args.corner_rounding_outer)
+    result = beam.edges("|Z").fillet(args.corner_rounding_outer)
     # Chamfer the eight original horizontal edges and the eight curved sections at the corners:
-    result = result.faces(">Z or <Z").chamfer(args.corner_rounding_outer - relative_epsilon(args.corner_rounding_outer))
+    # Chamfers the bore hole too: result = result.faces(">Z or <Z").chamfer(args.corner_rounding_outer - relative_epsilon(args.corner_rounding_outer))
+    # Pick out one edge on top and one on bottom and the chamfer propagates around the perimeters:
+    result = result.edges("(>Z and >X) or (<Z and >X)").chamfer(args.corner_rounding_outer - relative_epsilon(args.corner_rounding_outer))
     return result
 
-# Build 
-def build_grid_beam(args, length = 2, width = 1, height = 1): # BeamArgs
+def build_beam(args, width = 1, length = 2, height = 1):
+    """Build a solid beam, great for calibrating shrinkage and warparge from grid beam structures.
+    
+    These beams lack surface details like bores which might throw out your calipers.
+    
+    Args:
+        args (BeamArgs): The common parameters to a whole class of generated beams
+        like external dimensions and bore diameters which make generated models compatible.
+        width  (int) X-axis dimension of beam in multiples of the fundamental unit cube.
+        length (int) Y-axis dimension of beam in multiples of the fundamental unit cube.
+        height (int) Z-axis dimension of beam in multiples of the fundamental unit cube.
+    Returns:
+        Workplace representing the constructed beam.
+    """
+    result = cq.Workplane("XY" ).box(args.unit * width, args.unit * length, args.unit * height)
+    result = round_beam(args, result)
+    result = result.clean()
+    return result
+
+def build_grid_beam(args, width = 1, length = 2, height = 1): # BeamArgs
+    """Build a beam with holes, suitable for 3D Printing.
+    
+    Args:
+        args (BeamArgs): The common parameters to a whole class of generated beams
+        like external dimensions and bore diameters which make generated models compatible.
+        width  (int) X-axis dimension of beam in multiples of the fundamental unit cube.
+        length (int) Y-axis dimension of beam in multiples of the fundamental unit cube.
+        height (int) Z-axis dimension of beam in multiples of the fundamental unit cube.
+    Returns:
+        Workplace representing the constructed beam.
+    """
     result = cq.Workplane("XY" ).box(args.unit * width, args.unit * length, args.unit * height)
     
-    # Bore out the bolt penerations along the x-axis:
+    # Bore out the bolt penerations:
     result = result.faces("<X").workplane()
-    # result = yz_plane.cskHole(args.bolt_shaft_diameter, 9.9, 120.0, depth=200, )
-    result = result.center(-length * args.unit / 2 + args.half_unit, -height * args.unit / 2 + args.half_unit)
-    result = result .hole(args.bolt_shaft_diameter)
-    for z in range(height):
-        z_coord = args.half_unit + z * args.unit
-        for y in range(length):
-            y_coord = args.half_unit + y * args.unit
-            #result = result.center(y_coord, z_coord)
-            #result = result.hole(args.bolt_shaft_diameter)
-            #result = result.cskHole(args.bolt_shaft_diameter, 9.9, 120.0, depth=200, )
-            #result = yz_plane.hole(args.bolt_shaft_diameter)
-            pass
+    result = result.rarray(args.unit, args.unit, length, height).cskHole(args.bolt_shaft_diameter, args.bolt_contersink_diameter, args.bolt_contersink_angle)
+    result = result.faces(">X").workplane()
+    result = result.rarray(args.unit, args.unit, length, height).cskHole(args.bolt_shaft_diameter, args.bolt_contersink_diameter, args.bolt_contersink_angle)
     
-    # Round the four corner vertical edges:
-    result = result.edges(">(-1,-1,0) or >(1,-1,0) or >(-1,1,0) or >(1,1,0)").fillet(args.corner_rounding_outer)
-    # Chamfer the eight original horizontal edges and the eight curved sections at the corners:
-    # (note the originals might have been chopped up by now so we need to select the fragments of them)
-    result = result.edges(">(-1,0,-1) or >(1,0,-1) or >(0,-1,-1) or >(0,1,-1) or >(-1,0,1) or >(1,0,1) or >(0,-1,1) or >(0,1,1)").chamfer(args.corner_rounding_outer - relative_epsilon(args.corner_rounding_outer))
+    result = result.faces(">Y").workplane().center(width*args.half_unit, 0)
+    result = result.rarray(args.unit, args.unit, width, height).cskHole(args.bolt_shaft_diameter, args.bolt_contersink_diameter, args.bolt_contersink_angle)
+    result = result.faces("<Y").workplane()#.center(width*args.half_unit, 0)
+    result = result.rarray(args.unit, args.unit, width, height).cskHole(args.bolt_shaft_diameter, args.bolt_contersink_diameter, args.bolt_contersink_angle)
+    
+    result = result.faces("<Z").workplane().center(0, -length * args.half_unit)
+    result = result.rarray(args.unit, args.unit, width, length).cskHole(args.bolt_shaft_diameter, args.bolt_contersink_diameter, args.bolt_contersink_angle)
+    result = result.faces(">Z").workplane()#.center(0, -length * args.half_unit)
+    result = result.rarray(args.unit, args.unit, width, length).cskHole(args.bolt_shaft_diameter, args.bolt_contersink_diameter, args.bolt_contersink_angle)
+
+    result = round_beam(args, result)
+    result = result.clean()
+
     return result
 
-#if __name__ != '__main__':
-print(sys.stderr, __name__)
-result = build_beam(default_beam_args) + build_grid_beam(default_beam_args, 3, 3, 3).translate([10*9, 0, 0])
+def build_grid_beam_bored(args, width = 1, length = 2, height = 1): # BeamArgs
+    """Build a beam with boreholes for attaching metal hardware, suitable for 3D Printing.
+    
+    Args:
+        args (BeamArgs): The common parameters to a whole class of generated beams
+        like external dimensions and bore diameters which make generated models compatible.
+        width  (int) X-axis dimension of beam in multiples of the fundamental unit cube.
+        length (int) Y-axis dimension of beam in multiples of the fundamental unit cube.
+        height (int) Z-axis dimension of beam in multiples of the fundamental unit cube.
+    Returns:
+        Workplace representing the constructed beam.
+    """
+    result = cq.Workplane("XY" ).box(args.unit * width, args.unit * length, args.unit * height)
+    
+    # Bore out the bolt penerations:
+    result = result.faces("<X").workplane()
+    result = result.rarray(args.unit, args.unit, length, height).cboreHole(args.bolt_shaft_diameter, args.bolt_bore_diameter, args.bolt_bore_depth)
+    result = result.faces(">X").workplane()
+    result = result.rarray(args.unit, args.unit, length, height).hole(args.bolt_bore_diameter, args.bolt_bore_depth)
+    
+    result = result.faces(">Y").workplane().center(width*args.half_unit, 0)
+    result = result.rarray(args.unit, args.unit, width, height).cboreHole(args.bolt_shaft_diameter, args.bolt_bore_diameter, args.bolt_bore_depth)
+    result = result.faces("<Y").workplane()#.center(width*args.half_unit, 0)
+    result = result.rarray(args.unit, args.unit, width, height).hole(args.bolt_bore_diameter, args.bolt_bore_depth)
+    
+    result = result.faces("<Z").workplane().center(0, -length * args.half_unit)
+    result = result.rarray(args.unit, args.unit, width, length).cboreHole(args.bolt_shaft_diameter, args.bolt_bore_diameter, args.bolt_bore_depth)
+    result = result.faces(">Z").workplane()#.center(0, -length * args.half_unit)
+    result = result.rarray(args.unit, args.unit, width, length).hole(args.bolt_bore_diameter, args.bolt_bore_depth)
+
+    result = round_beam(args, result)
+    result = result.clean()
+
+    return result
+
+
+# Lay out a few parts:
+"""result =  build_beam(default_beam_args, 1,1)
+result += build_beam(default_beam_args, 2,1).translate([default_beam_args.half_unit, default_beam_args.half_unit * 3, 0])
+result += build_grid_beam(default_beam_args, 1,1).translate([default_beam_args.half_unit * 0, default_beam_args.half_unit * 6, 0])
+result += build_grid_beam(default_beam_args, 2,1).translate([default_beam_args.half_unit * 1, default_beam_args.half_unit * 9, 0])
+result += build_grid_beam_bored(default_beam_args, 1,1).translate([default_beam_args.half_unit * 0, default_beam_args.half_unit * 12, 0])
+result += build_grid_beam_bored(default_beam_args, 2,1).translate([default_beam_args.half_unit * 1, default_beam_args.half_unit * 15, 0])
+# Regular grid beam but with hard-edged holes:
+hard_edge_args = default_beam_args.copy()
+hard_edge_args.bolt_contersink_diameter = 0.01
+result += build_grid_beam(default_beam_args, 1,1).translate([default_beam_args.half_unit * 0, default_beam_args.half_unit * 18, 0])
+result += build_grid_beam(default_beam_args, 2,1).translate([default_beam_args.half_unit * 1, default_beam_args.half_unit * 21, 0])
+"""
+# Regular grid beam but with hard-edged holes:
+hard_edge_args = copy.copy(default_beam_args)
+hard_edge_args.bolt_contersink_diameter = 0.01
+# 1 x 10
+result += build_grid_beam(hard_edge_args, 10,1)
+
+#cq.exporters.export(result, "gridbeam_test_01.step")
+#cq.exporters.export(result, "gridbeam_test_01.svg")
+#cq.exporters.export(result, "gridbeam_test_01.stl")
+#cq.exporters.export(result, "gridbeam_test_01.3mf")
+cq.exporters.export(result, "gridbeam_test_01.1x10.3mf")
