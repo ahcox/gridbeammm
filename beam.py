@@ -57,7 +57,7 @@ def build_beam(args, width = 1, length = 2, height = 1):
     result = result.clean()
     return result
 
-def build_grid_beam(args, width = 1, length = 2, height = 1): # BeamArgs
+def build_grid_beam_v1(args, width = 1, length = 2, height = 1): # BeamArgs
     """Build a beam with holes, suitable for 3D Printing.
     
     Args:
@@ -127,6 +127,72 @@ def build_grid_beam_bored(args, width = 1, length = 2, height = 1): # BeamArgs
 
     return result
 
+def drill_grid_beam(args, context, perpendicular_axis = "X", width = 1, height = 1): # BeamArgs
+    """Fill one side of a beam with holes, through to the opposite face.
+       WIP ... doesn't work for every axis.
+    """
+    context = context.faces(">"+perpendicular_axis).workplane()
+    context = context.rarray(args.unit, args.unit, width, height).hole(args.bolt_shaft_diameter)
+    return context
+
+def build_grid_beam(args, width = 1, length = 2, height = 1): # BeamArgs
+    """Build a beam with holes, suitable for 3D Printing.
+    
+    Args:
+        args (BeamArgs): The common parameters to a whole class of generated beams
+        like external dimensions and bore diameters which make generated models compatible.
+        width  (int): X-axis dimension of beam in multiples of the fundamental unit cube.
+        length (int): Y-axis dimension of beam in multiples of the fundamental unit cube.
+        height (int): Z-axis dimension of beam in multiples of the fundamental unit cube.
+        drill_x (bool): If False, the X-axis won't have holes through, so the part will
+        be much more solid than otherwise.
+    Returns:
+        Workplace representing the constructed beam.
+    """
+    result = cq.Workplane("XY" ).box(args.unit * width, args.unit * length, args.unit * height)
+    raw_box = result
+    
+    # Bore out the bolt penerations with simple, non-chamfered holes:
+    result = result.faces(">X").workplane()
+    result = result.rarray(args.unit, args.unit, length, height).hole(args.bolt_shaft_diameter)
+
+    result = result.faces(">Y").workplane().center(width*args.half_unit, 0)
+    result = result.rarray(args.unit, args.unit, width, height).hole(args.bolt_shaft_diameter)
+
+    result = result.faces(">Z").workplane().center(0, -length * args.half_unit)
+    result = result.rarray(args.unit, args.unit, width, length).hole(args.bolt_shaft_diameter)
+
+    result = round_beam(args, result)
+    result = result.clean()
+
+    return result
+
+def build_grid_beam_capped_x(args, width = 1, length = 2, height = 1): # BeamArgs
+    """Build a beam with holes, suitable for 3D Printing but without holes parallel to the x-axis.
+    
+    Args:
+        args (BeamArgs): The common parameters to a whole class of generated beams
+        like external dimensions and bore diameters which make generated models compatible.
+        width  (int): X-axis dimension of beam in multiples of the fundamental unit cube.
+        length (int): Y-axis dimension of beam in multiples of the fundamental unit cube.
+        height (int): Z-axis dimension of beam in multiples of the fundamental unit cube.
+    Returns:
+        Workplace representing the constructed beam.
+    """
+    result = cq.Workplane("XY" ).box(args.unit * width, args.unit * length, args.unit * height)
+    raw_box = result
+    
+    # Bore out the bolt penerations with simple, non-chamfered holes:
+    result = result.faces(">Y").workplane()#.center(width*args.half_unit, 0)
+    result = result.rarray(args.unit, args.unit, width, height).hole(args.bolt_shaft_diameter)
+
+    result = result.faces(">Z").workplane().center(0, -length * args.half_unit)
+    result = result.rarray(args.unit, args.unit, width, length).hole(args.bolt_shaft_diameter)
+
+    result = round_beam(args, result)
+    result = result.clean()
+
+    return result
 
 # Lay out a few parts:
 """result =  build_beam(default_beam_args, 1,1)
@@ -142,13 +208,13 @@ result += build_grid_beam(default_beam_args, 1,1).translate([default_beam_args.h
 result += build_grid_beam(default_beam_args, 2,1).translate([default_beam_args.half_unit * 1, default_beam_args.half_unit * 21, 0])
 """
 # Regular grid beam but with hard-edged holes:
-hard_edge_args = copy.copy(default_beam_args)
-hard_edge_args.bolt_contersink_diameter = 0.01
+#hard_edge_args = copy.copy(default_beam_args)
+#hard_edge_args.bolt_contersink_diameter = 0.01
 # 1 x 10
-result += build_grid_beam(hard_edge_args, 10,1)
-
+result  = build_grid_beam(default_beam_args, 10,1)
+result += build_grid_beam_capped_x(default_beam_args, 10,1, 1).translate([0, default_beam_args.half_unit * 3, 0])
 #cq.exporters.export(result, "gridbeam_test_01.step")
-#cq.exporters.export(result, "gridbeam_test_01.svg")
+cq.exporters.export(result, "gridbeam_test_01.svg")
 #cq.exporters.export(result, "gridbeam_test_01.stl")
 #cq.exporters.export(result, "gridbeam_test_01.3mf")
 cq.exporters.export(result, "gridbeam_test_01.1x10.3mf")
