@@ -7,11 +7,12 @@ class BeamArgs:
         self.unit = 10 # 10mm fundamental unit on which whole grid is based.
         self.half_unit = self.unit / 2.0
         self.corner_rounding_outer = 0.5
-        self.bolt_shaft_diameter = 5.01 # The hardware tends to have 4.9xmm diameter so don't need much slop added.
+        self.bolt_shaft_diameter = 5.6 # The hardware tends to have 4.9xmm diameter so don't need much slop added.
         self.bolt_contersink_diameter = self.bolt_shaft_diameter + 0.5
         self.bolt_contersink_angle = 45 # Conutersink chamfers the lip of all holes slightly, It isn't to mate with sloped hardware
         self.bolt_bore_diameter = self.unit * 0.8
         self.bolt_bore_depth = 1.0
+        self.plug_thickness = 0.401
         
 default_beam_args = BeamArgs()
 
@@ -185,6 +186,8 @@ def build_grid_beam_capped_x(args, width = 1, length = 2, height = 1): # BeamArg
     # Bore out the bolt penerations with simple, non-chamfered holes:
     result = result.faces(">Y").workplane()#.center(width*args.half_unit, 0)
     result = result.rarray(args.unit, args.unit, width, height).hole(args.bolt_shaft_diameter)
+    # Doesn't work: result = result.rarray(args.unit, args.unit, width, height).translate([1, 1, 1]).hole(args.bolt_shaft_diameter)
+    #result = result.translate([0, 0, -1])
 
     result = result.faces(">Z").workplane().center(0, -length * args.half_unit)
     result = result.rarray(args.unit, args.unit, width, length).hole(args.bolt_shaft_diameter)
@@ -193,6 +196,17 @@ def build_grid_beam_capped_x(args, width = 1, length = 2, height = 1): # BeamArg
     result = result.clean()
 
     return result
+
+def build_grid_beam_capped_x_plugged(args, width = 1, length = 2, height = 1): # BeamArgs
+    """Build a grid beam with a thin filled-bottom layer to make printing easier in PETG."""
+    # Plug the holes that will touch the print bed with a single layer of plastic:
+    result = cq.Workplane("XY" ).box(args.unit * width - args.bolt_shaft_diameter*0.49, args.unit * length - args.bolt_shaft_diameter*0.49, args.plug_thickness)
+    result = result.translate([0,0,-(args.unit * height/2 - args.plug_thickness / 2)])
+
+    result += build_grid_beam_capped_x(args, width, length, height)
+    return result
+
+
 
 # Lay out a few parts:
 """result =  build_beam(default_beam_args, 1,1)
@@ -206,15 +220,17 @@ hard_edge_args = default_beam_args.copy()
 hard_edge_args.bolt_contersink_diameter = 0.01
 result += build_grid_beam(default_beam_args, 1,1).translate([default_beam_args.half_unit * 0, default_beam_args.half_unit * 18, 0])
 result += build_grid_beam(default_beam_args, 2,1).translate([default_beam_args.half_unit * 1, default_beam_args.half_unit * 21, 0])
-"""
+
 # Regular grid beam but with hard-edged holes:
 #hard_edge_args = copy.copy(default_beam_args)
 #hard_edge_args.bolt_contersink_diameter = 0.01
 # 1 x 10
-result  = build_grid_beam(default_beam_args, 10,1)
-result += build_grid_beam_capped_x(default_beam_args, 10,1, 1).translate([0, default_beam_args.half_unit * 3, 0])
+#result  = build_grid_beam(default_beam_args, 10,1)
+result = build_grid_beam_capped_x(default_beam_args, 40,1, 1).translate([0, default_beam_args.half_unit * 3, 0])
+#result = build_grid_beam_capped_x_plugged(default_beam_args, 10,1, 1).translate([0, default_beam_args.half_unit * 6, 0])
 #cq.exporters.export(result, "gridbeam_test_01.step")
 cq.exporters.export(result, "gridbeam_test_01.svg")
 #cq.exporters.export(result, "gridbeam_test_01.stl")
 #cq.exporters.export(result, "gridbeam_test_01.3mf")
 cq.exporters.export(result, "gridbeam_test_01.1x10.3mf")
+"""
