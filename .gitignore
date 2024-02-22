@@ -1,0 +1,8 @@
+*.3mf
+*.svg
+*.stl
+*.step
+*.gcode
+*.swp
+*.swo
+__pycache__
