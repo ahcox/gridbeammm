@@ -151,7 +151,6 @@ def build_grid_beam(args, width = 1, length = 2, height = 1): # BeamArgs
         Workplace representing the constructed beam.
     """
     result = cq.Workplane("XY" ).box(args.unit * width, args.unit * length, args.unit * height)
-    raw_box = result
     
     # Bore out the bolt penerations with simple, non-chamfered holes:
     result = result.faces(">X").workplane()
@@ -181,7 +180,6 @@ def build_grid_beam_capped_x(args, width = 1, length = 2, height = 1): # BeamArg
         Workplace representing the constructed beam.
     """
     result = cq.Workplane("XY" ).box(args.unit * width, args.unit * length, args.unit * height)
-    raw_box = result
     
     # Bore out the bolt penerations with simple, non-chamfered holes:
     result = result.faces(">Y").workplane()#.center(width*args.half_unit, 0)
@@ -207,30 +205,50 @@ def build_grid_beam_capped_x_plugged(args, width = 1, length = 2, height = 1): #
     return result
 
 
+def build_grid_beam_only_vertical(args, width = 1, length = 2, height = 1): # BeamArgs
+    """Build a beam with vertical holes only.
+    
+    Args:
+        args (BeamArgs): The common parameters to a whole class of generated beams
+        like external dimensions and bore diameters which make generated models compatible.
+        width  (int): X-axis dimension of beam in multiples of the fundamental unit cube.
+        length (int): Y-axis dimension of beam in multiples of the fundamental unit cube.
+        height (int): Z-axis dimension of beam in multiples of the fundamental unit cube.
+    Returns:
+        Workplace representing the constructed beam.
+    """
+    result = cq.Workplane("XY" ).box(args.unit * width, args.unit * length, args.unit * height)
+    
+    # Bore out the bolt penerations with simple, non-chamfered holes:
+    result = result.faces(">Z").workplane().center(0, 0)#-length * args.half_unit)
+    result = result.rarray(args.unit, args.unit, width, length).hole(args.bolt_shaft_diameter)
 
-# Lay out a few parts:
-"""result =  build_beam(default_beam_args, 1,1)
-result += build_beam(default_beam_args, 2,1).translate([default_beam_args.half_unit, default_beam_args.half_unit * 3, 0])
-result += build_grid_beam(default_beam_args, 1,1).translate([default_beam_args.half_unit * 0, default_beam_args.half_unit * 6, 0])
-result += build_grid_beam(default_beam_args, 2,1).translate([default_beam_args.half_unit * 1, default_beam_args.half_unit * 9, 0])
-result += build_grid_beam_bored(default_beam_args, 1,1).translate([default_beam_args.half_unit * 0, default_beam_args.half_unit * 12, 0])
-result += build_grid_beam_bored(default_beam_args, 2,1).translate([default_beam_args.half_unit * 1, default_beam_args.half_unit * 15, 0])
-# Regular grid beam but with hard-edged holes:
-hard_edge_args = default_beam_args.copy()
-hard_edge_args.bolt_contersink_diameter = 0.01
-result += build_grid_beam(default_beam_args, 1,1).translate([default_beam_args.half_unit * 0, default_beam_args.half_unit * 18, 0])
-result += build_grid_beam(default_beam_args, 2,1).translate([default_beam_args.half_unit * 1, default_beam_args.half_unit * 21, 0])
+    result = round_beam(args, result)
+    # @todo Consider only cleaning the final bed right at the end. Is doing it for every beam my perf poroblem?    
+    result = result.clean()
 
-# Regular grid beam but with hard-edged holes:
-#hard_edge_args = copy.copy(default_beam_args)
-#hard_edge_args.bolt_contersink_diameter = 0.01
-# 1 x 10
-#result  = build_grid_beam(default_beam_args, 10,1)
-result = build_grid_beam_capped_x(default_beam_args, 40,1, 1).translate([0, default_beam_args.half_unit * 3, 0])
-#result = build_grid_beam_capped_x_plugged(default_beam_args, 10,1, 1).translate([0, default_beam_args.half_unit * 6, 0])
-#cq.exporters.export(result, "gridbeam_test_01.step")
-cq.exporters.export(result, "gridbeam_test_01.svg")
-#cq.exporters.export(result, "gridbeam_test_01.stl")
-#cq.exporters.export(result, "gridbeam_test_01.3mf")
-cq.exporters.export(result, "gridbeam_test_01.1x10.3mf")
-"""
+    return result
+
+def build_grid_beam_spacer(args, height = 5.0): # BeamArgs
+    """Build a 1x1 beam with arbitrary height in mm and a vertical hole.
+    
+    Args:
+        args (BeamArgs): The common parameters to a whole class of generated beams
+        like external dimensions and bore diameters which make generated models compatible.
+        height (int): Z-axis dimension of beam in mm.
+    Returns:
+        Workplace representing the constructed beam.
+    """
+    result = cq.Workplane("XY" ).box(args.unit, args.unit, height)
+    
+    # Bore out the bolt penerations with simple, non-chamfered holes:
+    result = result.faces(">Z").workplane().center(0, 0)#-length * args.half_unit)
+    result = result.hole(args.bolt_shaft_diameter)
+
+    result = round_beam(args, result)
+    # @todo Consider only cleaning the final bed right at the end. Is doing it for every beam my perf poroblem?    
+    result = result.clean()
+
+    return result
+
+
