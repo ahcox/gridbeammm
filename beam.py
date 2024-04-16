@@ -2,6 +2,9 @@ import cadquery as cq
 import sys
 import copy
 
+z_hole_scale =  1.2
+y_hole_scale = 1.15
+
 class BeamArgs:
     def __init__(self):
         self.unit = 10 # 10mm fundamental unit on which whole grid is based.
@@ -128,6 +131,38 @@ def build_grid_beam_bored(args, width = 1, length = 2, height = 1): # BeamArgs
 
     return result
 
+def build_grid_beam_bored_capped_x(args, width = 1, length = 2, height = 1): # BeamArgs
+    """Build a beam with boreholes for attaching metal hardware, suitable for 3D Printing.
+    
+    Args:
+        args (BeamArgs): The common parameters to a whole class of generated beams
+        like external dimensions and bore diameters which make generated models compatible.
+        width  (int) X-axis dimension of beam in multiples of the fundamental unit cube.
+        length (int) Y-axis dimension of beam in multiples of the fundamental unit cube.
+        height (int) Z-axis dimension of beam in multiples of the fundamental unit cube.
+    Returns:
+        Workplace representing the constructed beam.
+    """
+    result = cq.Workplane("XY" ).box(args.unit * width, args.unit * length, args.unit * height)
+    
+    # Bore out the bolt penerations:
+    
+    result = result.faces(">Y").workplane()#.center(width*args.half_unit, 0)
+    result = result.rarray(args.unit, args.unit, width, height).cboreHole(args.bolt_shaft_diameter, args.bolt_bore_diameter, args.bolt_bore_depth)
+    result = result.faces("<Y").workplane()#.center(width*args.half_unit, 0)
+    result = result.rarray(args.unit, args.unit, width, height).hole(args.bolt_bore_diameter, args.bolt_bore_depth)
+    
+    result = result.faces("<Z").workplane().center(0, -length * args.half_unit)
+    result = result.rarray(args.unit, args.unit, width, length).hole(args.bolt_shaft_diameter)
+    #result = result.rarray(args.unit, args.unit, width, length).cboreHole(args.bolt_shaft_diameter, args.bolt_bore_diameter, args.bolt_bore_depth)
+    #result = result.faces(">Z").workplane()#.center(0, -length * args.half_unit)
+    #result = result.rarray(args.unit, args.unit, width, length).hole(args.bolt_bore_diameter, args.bolt_bore_depth)
+
+    result = round_beam(args, result)
+    result = result.clean()
+
+    return result
+
 def drill_grid_beam(args, context, perpendicular_axis = "X", width = 1, height = 1): # BeamArgs
     """Fill one side of a beam with holes, through to the opposite face.
        WIP ... doesn't work for every axis.
@@ -183,12 +218,12 @@ def build_grid_beam_capped_x(args, width = 1, length = 2, height = 1): # BeamArg
     
     # Bore out the bolt penerations with simple, non-chamfered holes:
     result = result.faces(">Y").workplane()#.center(width*args.half_unit, 0)
-    result = result.rarray(args.unit, args.unit, width, height).hole(args.bolt_shaft_diameter)
+    result = result.rarray(args.unit, args.unit, width, height).hole(args.bolt_shaft_diameter * y_hole_scale)
     # Doesn't work: result = result.rarray(args.unit, args.unit, width, height).translate([1, 1, 1]).hole(args.bolt_shaft_diameter)
     #result = result.translate([0, 0, -1])
 
     result = result.faces(">Z").workplane().center(0, -length * args.half_unit)
-    result = result.rarray(args.unit, args.unit, width, length).hole(args.bolt_shaft_diameter)
+    result = result.rarray(args.unit, args.unit, width, length).hole(args.bolt_shaft_diameter * z_hole_scale)
 
     result = round_beam(args, result)
     result = result.clean()
@@ -202,6 +237,36 @@ def build_grid_beam_capped_x_plugged(args, width = 1, length = 2, height = 1): #
     result = result.translate([0,0,-(args.unit * height/2 - args.plug_thickness / 2)])
 
     result += build_grid_beam_capped_x(args, width, length, height)
+    return result
+
+def build_grid_beam_capped_x_square_y(args, width = 1, length = 2, height = 1): # BeamArgs
+    """Build a beam with holes, suitable for 3D Printing but without holes parallel to the x-axis.
+       The Y-axis holes have a square section,
+    
+    Args:
+        args (BeamArgs): The common parameters to a whole class of generated beams
+        like external dimensions and bore diameters which make generated models compatible.
+        width  (int): X-axis dimension of beam in multiples of the fundamental unit cube.
+        length (int): Y-axis dimension of beam in multiples of the fundamental unit cube.
+        height (int): Z-axis dimension of beam in multiples of the fundamental unit cube.
+    Returns:
+        Workplace representing the constructed beam.
+    """
+    result = build_beam(args, width, length, height)
+    #result = cq.Workplane("XY" ).box(args.unit * width, args.unit * length, args.unit * height)
+    
+    # Bore out the bolt penerations with squares:
+    result = result.faces(">Y").workplane()
+    #result = result.rarray(args.unit, args.unit, width, height).hole(args.bolt_shaft_diameter * y_hole_scale)
+    result = result.rarray(args.unit, args.unit, width, height).rect(args.bolt_shaft_diameter, args.bolt_shaft_diameter * y_hole_scale, True, False)
+    result = result.cutThruAll()
+
+    # Bore out the bolt penerations with simple, non-chamfered holes:
+    result = result.faces(">Z").workplane().center(0, -length * args.half_unit)
+    result = result.rarray(args.unit, args.unit, width, length).hole(args.bolt_shaft_diameter * z_hole_scale)
+
+    result = result.clean()
+
     return result
 
 
